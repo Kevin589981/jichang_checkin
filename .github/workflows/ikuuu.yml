@@ -34,6 +34,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Debug Secrets
+        run: |
+          echo "URL=$URL"
+          echo "SCKEY=$SCKEY"
+          echo "EMAIL=$EMAIL"
+          echo "PASSWD=$PASSWD"
+          echo "CONFIG=$CONFIG"
+        env:
+          URL: ${{ secrets.URL }}
+          SCKEY: ${{ secrets.SCKEY }}
+          EMAIL: ${{ secrets.EMAIL }}
+          PASSWD: ${{ secrets.PASSWD }}
+          CONFIG: ${{ secrets.CONFIG }}
       - name: Run sign
         env:
           URL: ${{ secrets.URL }}
