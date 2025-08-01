@@ -70,10 +70,14 @@ jobs:
             echo "Checkin completed with errors"
           fi
           
-          # The result is now directly written to GITHUB_OUTPUT by the Python script
-          # If no result was written, set a default error message
-          if [ ! -s "$GITHUB_OUTPUT" ] || ! grep -q "result<<EOF" "$GITHUB_OUTPUT"; then
-            echo "result=Checkin process encountered an exception, please check logs" >> $GITHUB_OUTPUT
+          # Check if the Python script wrote the result to GITHUB_OUTPUT
+          if ! grep -q "result<<EOF" "$GITHUB_OUTPUT" 2>/dev/null; then
+            echo "Python script did not write result, setting default error message"
+            echo "result<<EOF" >> $GITHUB_OUTPUT
+            echo "Checkin process encountered an exception, please check logs" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "Result successfully written by Python script"
           fi
           
           # Display the full output for debugging
@@ -104,7 +108,7 @@ jobs:
           client-payload: |
             {
               "title": "Airport Checkin Notification",
-              "content": "${{ needs.checkin.outputs.checkin_result }}",
+              "content": ${{ toJSON(needs.checkin.outputs.checkin_result) }},
               "source": "airport",
               "timestamp": "${{ github.event.head_commit.timestamp || github.run_started_at }}",
               "success": ${{ needs.checkin.outputs.checkin_success }},
