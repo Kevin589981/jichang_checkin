@@ -84,6 +84,10 @@ class AirportCheckin:
             message = result.get('msg', '签到完成')
             success = result.get('ret') == 1
             
+            # 如果消息包含"已经签到"，也视为成功
+            if not success and message and '已经签到' in message:
+                success = True
+            
             print(f'签到结果: {message}')
             
             return CheckinResult(
@@ -134,6 +138,21 @@ def parse_config(config_str: str) -> List[Account]:
     return accounts
 
 
+def mask_email(email: str) -> str:
+    """对邮箱地址进行脱敏处理"""
+    # if '@' not in email:
+    #     return email
+    
+    # local, domain = email.split('@', 1)
+    # if len(local) <= 2:
+    #     masked_local = '*' * len(local)
+    # else:
+    #     masked_local = local[0] + '*' * (len(local) - 2) + local[-1]
+    
+    # return f"{masked_local}@{domain}"
+    return "*****"
+
+
 def format_results(results: List[CheckinResult]) -> str:
     """格式化签到结果为通知内容"""
     if not results:
@@ -151,7 +170,8 @@ def format_results(results: List[CheckinResult]) -> str:
     
     for i, result in enumerate(results, 1):
         status = "✅ 成功" if result.success else "❌ 失败"
-        content_lines.append(f"{i}. {result.account}")
+        masked_account = mask_email(result.account)
+        content_lines.append(f"{i}. {masked_account}")
         content_lines.append(f"   状态: {status}")
         content_lines.append(f"   消息: {result.message}")
         
