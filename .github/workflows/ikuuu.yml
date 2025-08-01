@@ -70,13 +70,9 @@ jobs:
             echo "Checkin completed with errors"
           fi
           
-          # Extract the formatted result from output
-          if grep -q "::set-output name=result::" checkin_output.txt; then
-            RESULT=$(grep "::set-output name=result::" checkin_output.txt | sed 's/::set-output name=result:://')
-            echo "result<<EOF" >> $GITHUB_OUTPUT
-            echo "$RESULT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
+          # The result is now directly written to GITHUB_OUTPUT by the Python script
+          # If no result was written, set a default error message
+          if [ ! -s "$GITHUB_OUTPUT" ] || ! grep -q "result<<EOF" "$GITHUB_OUTPUT"; then
             echo "result=Checkin process encountered an exception, please check logs" >> $GITHUB_OUTPUT
           fi
           

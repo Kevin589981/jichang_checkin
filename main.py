@@ -4,7 +4,7 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 
 @dataclass
@@ -139,13 +139,15 @@ def format_results(results: List[CheckinResult]) -> str:
     if not results:
         return "没有签到结果"
     
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    content_lines = [f"机场签到结果 - {timestamp}\n"]
+    # 使用北京时间（东8区）
+    beijing_tz = timezone(timedelta(hours=8))
+    timestamp = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M:%S")
+    content_lines = [f"机场签到结果 - {timestamp}"]
     
     success_count = sum(1 for r in results if r.success)
     total_count = len(results)
     
-    content_lines.append(f"总计: {total_count} 个账号，成功: {success_count} 个\n")
+    content_lines.append(f"总计: {total_count} 个账号，成功: {success_count} 个")
     
     for i, result in enumerate(results, 1):
         status = "✅ 成功" if result.success else "❌ 失败"
@@ -192,8 +194,16 @@ def main():
         print(formatted_result)
         
         # 输出结果供 GitHub Actions 使用
-        # 使用 GitHub Actions 的输出语法
-        print(f"::set-output name=result::{formatted_result}")
+        # 使用环境文件方式输出多行内容
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if github_output:
+            with open(github_output, 'a', encoding='utf-8') as f:
+                f.write("result<<EOF\n")
+                f.write(formatted_result)
+                f.write("\nEOF\n")
+        else:
+            # 兼容旧版本或本地测试
+            print(f"::set-output name=result::{formatted_result}")
         
         # 检查是否有失败的签到
         failed_count = sum(1 for r in results if not r.success)
