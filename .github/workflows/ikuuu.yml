@@ -1,58 +1,123 @@
-name: "ikuuu airport Checkin"
+name: "Airport Checkin"
 
 on:
   schedule:
     - cron: "0 23 * * *"  # scheduled at 06:00 (UTC+8) everyday
   workflow_dispatch:
+  repository_dispatch:
+    types: [manual-checkin]
 
 env:
-  RUN_ENV: 'ikuuu'
+  RUN_ENV: 'airport'
 
 jobs:
-  build:
+  checkin:
     runs-on: ubuntu-latest
     environment: ikuuu
-    # if: github.ref == 'refs/heads/master'
+    outputs:
+      checkin_result: ${{ steps.checkin.outputs.result }}
+      checkin_success: ${{ steps.checkin.outputs.success }}
 
     steps:
-      - name: Checkout master
-        uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # ref: master
 
-      - name: Set up python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.10.16
+          python-version: '3.11'
 
-      - name: Random sleep
+      - name: Random sleep for scheduled runs
         if: github.event_name == 'schedule'
-        run: sleep $(shuf -i 10-30 -n 1)
+        run: sleep $(shuf -i 10-60 -n 1)
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Debug Secrets
-        run: |
-          echo "URL=$URL"
-          echo "SCKEY=$SCKEY"
-          echo "EMAIL=$EMAIL"
-          echo "PASSWD=$PASSWD"
-          echo "CONFIG=$CONFIG"
+
+      - name: Validate configuration
         env:
           URL: ${{ secrets.URL }}
-          SCKEY: ${{ secrets.SCKEY }}
-          EMAIL: ${{ secrets.EMAIL }}
-          PASSWD: ${{ secrets.PASSWD }}
-          CONFIG: ${{ secrets.CONFIG }}
-      - name: Run sign
-        env:
-          URL: ${{ secrets.URL }}
-          SCKEY: ${{ secrets.SCKEY }}
-          EMAIL: ${{ secrets.EMAIL }}
-          PASSWD: ${{ secrets.PASSWD }}
           CONFIG: ${{ secrets.CONFIG }}
         run: |
-          python3 ./main.py
+          if [ -z "$URL" ]; then
+            echo "::error::URL secret is not configured"
+            exit 1
+          fi
+          if [ -z "$CONFIG" ]; then
+            echo "::error::CONFIG secret is not configured"
+            exit 1
+          fi
+          echo "Configuration validation passed"
+
+      - name: Execute airport checkin
+        id: checkin
+        env:
+          URL: ${{ secrets.URL }}
+          CONFIG: ${{ secrets.CONFIG }}
+        run: |
+          echo "Starting airport checkin process..."
+          
+          # Capture output and exit code
+          if python3 ./main.py > checkin_output.txt 2>&1; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "Checkin completed successfully"
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "Checkin completed with errors"
+          fi
+          
+          # Extract the formatted result from output
+          if grep -q "::set-output name=result::" checkin_output.txt; then
+            RESULT=$(grep "::set-output name=result::" checkin_output.txt | sed 's/::set-output name=result:://')
+            echo "result<<EOF" >> $GITHUB_OUTPUT
+            echo "$RESULT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "result=Checkin process encountered an exception, please check logs" >> $GITHUB_OUTPUT
+          fi
+          
+          # Display the full output for debugging
+          echo "=== Checkin Output ==="
+          cat checkin_output.txt
+          echo "======================"
+
+      - name: Upload checkin logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkin-logs-${{ github.run_number }}
+          path: checkin_output.txt
+          retention-days: 7
+
+  notify:
+    needs: checkin
+    runs-on: ubuntu-latest
+    if: always() && needs.checkin.result != 'cancelled'
+    
+    steps:
+      - name: Trigger notification service
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          repository: ${{ secrets.NOTIFICATION_REPO }}
+          event-type: send-notification
+          client-payload: |
+            {
+              "title": "Airport Checkin Notification",
+              "content": "${{ needs.checkin.outputs.checkin_result }}",
+              "source": "airport",
+              "timestamp": "${{ github.event.head_commit.timestamp || github.run_started_at }}",
+              "success": ${{ needs.checkin.outputs.checkin_success }},
+              "workflow_run_id": "${{ github.run_id }}",
+              "repository": "${{ github.repository }}"
+            }
+
+      - name: Notification dispatch completed
+        run: |
+          echo "Notification dispatch completed"
+          echo "Repository: ${{ secrets.NOTIFICATION_REPO }}"
+          echo "Success: ${{ needs.checkin.outputs.checkin_success }}"
