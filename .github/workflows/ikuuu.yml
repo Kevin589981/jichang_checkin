@@ -29,9 +29,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Random sleep for scheduled runs
-        if: github.event_name == 'schedule'
-        run: sleep $(shuf -i 10-60 -n 1)
+      # - name: Random sleep for scheduled runs
+      #   if: github.event_name == 'schedule'
+      #   run: sleep $(shuf -i 10-60 -n 1)
 
       - name: Install dependencies
         run: |
